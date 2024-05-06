@@ -35,3 +35,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+index_generic.js
+index_jup.js
+index_parcl.js
+index_test.js
+index.js
+index_wen.js
+index.js

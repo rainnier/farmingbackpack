@@ -7,7 +7,7 @@ function delay(ms) {
     setTimeout(resolve, ms)
   })
 }
-
+// command - 'node index_coins.js'
 //当前年份日期时分秒
 // The current year, date, hour, minute, and second
 
@@ -50,24 +50,39 @@ function getNowFormatDate() {
   return currentdate
 }
 
-let successbuy = 0
-let sellbuy = 0
-
 // Cứ mỗi 6 giây đặt lệnh mua/bán 1 lần, ae có thể tăng giảm tùy theo ý thích tối hiểu 3 giây trở lên.
 // Place a buy/sell order every 6 seconds. You can adjust the frequency according to your preference, with a minimum interval of 3 seconds
 const delayTime = 6
 // Điền 0 để tắt tính volumme và fee
 // Enter 0 to disable volume and fee calculation
+
+//-----------------------------------------------------------
+//----------------------------------------------------------- START Edit here
 const showVolumeAndFee = 1
 let totalVolume = 0
 let totalFee = 0
+let tradeProps = {
+  // lastTradePrice: 1.0763, // JUP
+
+  lastTradePrice: 0.411, //PRCL
+  // lastTradePrice: 0.00021996, // WEN
+}
+const baseToken = 'PRCL'
+const pricePlus2FeesMultiplier = 1.0019
+//----------------------------------------------------------- END Edit here
+//-----------------------------------------------------------
+
+let successbuy = 0
+let sellbuy = 0
+const token = `${baseToken}_USDC`
+const leftToken = `${baseToken}`
 const init = async (client) => {
   try {
     if (showVolumeAndFee) {
       // Tính volume và phí 1000 giao dịch gần nhất
       // Calculate the volume and fees of the 1000 most recent transactions
       let histories = await client.FillHistory({
-        symbol: 'JUP_USDC',
+        symbol: token,
         limit: '1000',
       })
       if (histories.length) {
@@ -76,7 +91,7 @@ const init = async (client) => {
         }, 0)
         let totalFeeSol =
           histories
-            .filter((his) => his.feeSymbol === 'JUP')
+            .filter((his) => his.feeSymbol === leftToken)
             .reduce((pre, next) => {
               return pre + next.fee
             }, 0) * histories[0].price
@@ -129,9 +144,9 @@ const init = async (client) => {
     // Kiểm tra số dư USDC trong tài khoản có lớn hơn 5 không
     // Check if the balance of USDC in the account is greater than 5
     if (userbalance.USDC.available > 5) {
-      await buyfun(client)
+      await buyfun(client, tradeProps)
     } else {
-      await sellfun(client)
+      await sellfun(client, tradeProps)
       return
     }
   } catch (e) {
@@ -141,12 +156,12 @@ const init = async (client) => {
   }
 }
 
-const sellfun = async (client) => {
+const sellfun = async (client, props) => {
   // Hủy tất cả các đơn đặt hàng chưa hoàn thành
   // Cancel all outstanding orders
-  let GetOpenOrders = await client.GetOpenOrders({ symbol: 'JUP_USDC' })
+  let GetOpenOrders = await client.GetOpenOrders({ symbol: token })
   if (GetOpenOrders.length > 0) {
-    let CancelOpenOrders = await client.CancelOpenOrders({ symbol: 'JUP_USDC' })
+    let CancelOpenOrders = await client.CancelOpenOrders({ symbol: token })
     // console.log(getNowFormatDate(), 'Hủy tất cả các đơn đặt hàng')
     console.log(getNowFormatDate(), 'Cancel all orders')
   } else {
@@ -162,57 +177,78 @@ const sellfun = async (client) => {
   // Fetching account information
   let userbalance2 = await client.Balance()
   //   console.log(getNowFormatDate(), 'Thông tin tài khoản:', userbalance2)
-  console.log(getNowFormatDate(), 'Account information:', userbalance2)
+  // console.log(getNowFormatDate(), 'Account information:', userbalance2)
   console.log(
     getNowFormatDate(),
     // 'Đang lấy giá thị trường hiện tại của JUP_USDC...'
-    'Fetching the current market price of JUP_USDC...'
+    `Fetching the current market price of ${token}...`
   )
   // Lấy giá hiện tại
-  let { lastPrice: lastPriceask } = await client.Ticker({ symbol: 'JUP_USDC' })
+  let { lastPrice: lastPriceask } = await client.Ticker({ symbol: token })
+  console.log(`Last trade price is: ${props.lastTradePrice}`)
+  console.log(
+    `Should sell profitably more than ${
+      props.lastTradePrice * pricePlus2FeesMultiplier
+    }`
+  )
   console.log(
     getNowFormatDate(),
     // 'Giá thị trường hiện tại của JUP_USDC:',
-    'The current market price of JUP_USDC:',
+    `The current market price of ${token}:`,
     lastPriceask
   )
-  //   let quantitys = (userbalance2.JUP.available - 0.02).toFixed(2).toString()
-  let quantitys = (userbalance2.JUP.available - 2).toFixed(2).toString()
-  //   console.log(getNowFormatDate(), `Đang bán... Bán ${quantitys} SOL`)
-  console.log(getNowFormatDate(), `Selling... Selling ${quantitys} JUP`)
-  let orderResultAsk = await client.ExecuteOrder({
-    orderType: 'Limit',
-    price: lastPriceask.toString(),
-    quantity: quantitys,
-    side: 'Ask', // Bán
-    symbol: 'JUP_USDC',
-    timeInForce: 'IOC',
-  })
 
-  if (orderResultAsk?.status == 'Filled' && orderResultAsk?.side == 'Ask') {
-    // console.log(getNowFormatDate(), 'Bán thành công')
-    console.log(getNowFormatDate(), 'Sale successful')
-    sellbuy += 1
+  if (lastPriceask > props.lastTradePrice * pricePlus2FeesMultiplier) {
+    //   let quantitys = (userbalance2.JUP.available - 0.02).toFixed(2).toString()
+    let quantitys = (userbalance2[leftToken].available - 2)
+      .toFixed(2)
+      .toString()
+    //   console.log(getNowFormatDate(), `Đang bán... Bán ${quantitys} SOL`)
     console.log(
       getNowFormatDate(),
-      //   'Chi tiết đơn hàng:',
-      'Order details:',
-      `Giá bán:${orderResultAsk.price}, Số lượng bán:${orderResultAsk.quantity}, Mã đơn hàng:${orderResultAsk.id}\n\n``Selling price:${orderResultAsk.price}, Quantity for sale:${orderResultAsk.quantity}, Order code:${orderResultAsk.id}\n\n`
+      `Selling... Selling ${quantitys} ${leftToken}`
     )
-    init(client)
+    let orderResultAsk = await client.ExecuteOrder({
+      orderType: 'Limit',
+      price: lastPriceask.toString(),
+      quantity: quantitys,
+      side: 'Ask', // Bán
+      symbol: token,
+      timeInForce: 'IOC',
+    })
+
+    if (orderResultAsk?.status == 'Filled' && orderResultAsk?.side == 'Ask') {
+      // console.log(getNowFormatDate(), 'Bán thành công')
+      console.log(getNowFormatDate(), 'Sale successful')
+      sellbuy += 1
+      console.log(
+        getNowFormatDate(),
+        //   'Chi tiết đơn hàng:',
+        'Order details:',
+        // `Giá bán:${orderResultAsk.price}, Số lượng bán:${orderResultAsk.quantity}, Mã đơn hàng:${orderResultAsk.id}\n\n``Selling price:${orderResultAsk.price}, Quantity for sale:${orderResultAsk.quantity}, Order code:${orderResultAsk.id}\n\n`
+        `Selling price:${orderResultAsk.price}, Quantity for sale:${orderResultAsk.quantity}, Order code:${orderResultAsk.id}\n\n`
+      )
+      props.lastTradePrice = orderResultAsk.price //lastPriceask
+      init(client)
+    } else {
+      // console.log(getNowFormatDate(), 'Bán thất bại ')
+      console.log(getNowFormatDate(), 'Sale failed ')
+      // throw new Error('Bán thất bại')
+      throw new Error('Sale unsuccessful')
+    }
   } else {
     // console.log(getNowFormatDate(), 'Bán thất bại ')
-    console.log(getNowFormatDate(), 'Sale failed ')
+    console.log(getNowFormatDate(), 'Not profitable')
     // throw new Error('Bán thất bại')
     throw new Error('Sale unsuccessful')
   }
 }
-const buyfun = async (client) => {
+const buyfun = async (client, props) => {
   // Hủy tất cả các đơn đặt hàng chưa hoàn thành
   // Cancel all outstanding orders
-  let GetOpenOrders = await client.GetOpenOrders({ symbol: 'JUP_USDC' })
+  let GetOpenOrders = await client.GetOpenOrders({ symbol: token })
   if (GetOpenOrders.length > 0) {
-    let CancelOpenOrders = await client.CancelOpenOrders({ symbol: 'JUP_USDC' })
+    let CancelOpenOrders = await client.CancelOpenOrders({ symbol: token })
     // console.log(getNowFormatDate(), 'Hủy tất cả các đơn đặt hàng')
     console.log(getNowFormatDate(), 'Cancel all orders')
   } else {
@@ -231,14 +267,14 @@ const buyfun = async (client) => {
   console.log(
     getNowFormatDate(),
     // 'Đang lấy giá thị trường hiện tại của JUP_USDC...'
-    'Fetching the current market price of JUP_USDC...'
+    `Fetching the current market price of ${token}...`
   )
   // Lấy giá hiện tại
-  let { lastPrice } = await client.Ticker({ symbol: 'JUP_USDC' })
+  let { lastPrice } = await client.Ticker({ symbol: token })
   console.log(
     getNowFormatDate(),
     // 'Giá thị trường hiện tại của JUP_USDC:',
-    'The current market price of JUP_USDC:',
+    `The current market price of ${token}:`,
     lastPrice
   )
   console.log(
@@ -248,7 +284,7 @@ const buyfun = async (client) => {
     //   .toString()} USDC để mua SOL`
     `Buying... Using ${(userbalance.USDC.available - 2)
       .toFixed(2)
-      .toString()} USDC to buy JUP`
+      .toString()} USDC to buy ${leftToken}`
   )
   let quantitys = ((userbalance.USDC.available - 2) / lastPrice)
     .toFixed(2)
@@ -258,13 +294,14 @@ const buyfun = async (client) => {
     price: lastPrice.toString(),
     quantity: quantitys,
     side: 'Bid', // Mua
-    symbol: 'JUP_USDC',
+    symbol: token,
     timeInForce: 'IOC',
   })
   if (orderResultBid?.status == 'Filled' && orderResultBid?.side == 'Bid') {
     // console.log(getNowFormatDate(), 'Đặt hàng thành công')
     console.log(getNowFormatDate(), 'Order placed successfully')
     successbuy += 1
+    props.lastTradePrice = orderResultBid.price //lastPrice
     console.log(
       getNowFormatDate(),
       //   'Chi tiết đơn hàng:',
