@@ -324,8 +324,8 @@ const buyfun = async (client, props) => {
 
 ;(async () => {
   // Thay bằng apisecret và apikey của anh em
-  const apisecret = '2hynBojQTUe5ZxQAwkm9RgVNRAJDAPQyfnjzLVqGx0U='
-  const apikey = 'e4UP0+C9KHxSq4bcRLCUZy8//Sacv3tOpdqnv2N2hsE='
+  const apisecret = 'YOUR_SECRET_KEY'
+  const apikey = 'YOUR_API_KEY'
   const client = new backpack_client_1.BackpackClient(apisecret, apikey)
   init(client)
 })()
